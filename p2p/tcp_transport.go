@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+
 )
 
 // TCPPeer repeesents a remote node over a TCP established connection.
@@ -23,23 +24,30 @@ func NewTCPeer(conn net.Conn, outbound bool) *TCPPeer {
 	}
 }
 
-type TCPTransport struct {
-	listenAddress string
-	listener      net.Listener
+type TCPTransportOpts struct {
+	ListenAddr string
+	HandshakeFunc HandshakeFunc
+	Decoder Decoder
+}
 
+type TCPTransport struct {
+	TCPTransportOpts
+	listener      net.Listener
+	shakeHands HandshakeFunc
+	// decoder 	 Decoder
 	mu    sync.RWMutex // RWMutex is a reader/writer mutual exclusion lock.  Mutex will protect the map of peers so they are witten above the field (in our case peers) that they are protecting.
 	peers map[net.Addr]Peer
 }
 
-func NewTCPTransport(listenAddr string) *TCPTransport {
+func NewTCPTransport(opts TCPTransportOpts) *TCPTransport {
 	return &TCPTransport{
-		listenAddress: listenAddr,
+		shakeHands: NOPHandshakeFunc,
 	}
 }
 
 func (t *TCPTransport) ListenAndAccept() error {
 	var err error
-	t.listener, err = net.Listen("tcp", t.listenAddress)
+	t.listener, err = net.Listen("tcp", t.ListenAddr)
 	if err != nil {
 		return err
 	}
@@ -58,7 +66,22 @@ func (t *TCPTransport) startAcceptLoop() {
 	}
 }
 
+
 func (t *TCPTransport) handleConnection(conn net.Conn) {
-	peer := NewTCPeer(conn, false)
-	fmt.Printf("new incoming connection: %+v\n", peer)
+	peer := NewTCPeer(conn, true)
+
+	if err := t.HandshakeFunc(peer); err != nil {
+		conn.Close()
+		fmt.Printf("failed to shake hands: %s\n", err)
+		return
+	}
+
+	msg := &Message{}
+	for {
+		if err := t.Decoder.Decode(conn, msg); err != nil {
+			fmt.Printf("failed to decode message: %s\n", err)
+			continue
+		}
+		fmt.Printf("received message: %+v\n", msg)
+	}
 }
