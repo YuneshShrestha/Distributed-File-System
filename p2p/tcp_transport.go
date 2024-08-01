@@ -1,10 +1,11 @@
 package p2p
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"net"
 	"sync"
-
 )
 
 // TCPPeer repeesents a remote node over a TCP established connection.
@@ -25,14 +26,14 @@ func NewTCPeer(conn net.Conn, outbound bool) *TCPPeer {
 }
 
 type TCPTransportOpts struct {
-	ListenAddr string
+	ListenAddr    string
 	HandshakeFunc HandshakeFunc
-	Decoder Decoder
+	Decoder       Decoder
 }
 
 type TCPTransport struct {
 	TCPTransportOpts
-	listener      net.Listener
+	listener   net.Listener
 	shakeHands HandshakeFunc
 	// decoder 	 Decoder
 	mu    sync.RWMutex // RWMutex is a reader/writer mutual exclusion lock.  Mutex will protect the map of peers so they are witten above the field (in our case peers) that they are protecting.
@@ -41,7 +42,8 @@ type TCPTransport struct {
 
 func NewTCPTransport(opts TCPTransportOpts) *TCPTransport {
 	return &TCPTransport{
-		shakeHands: NOPHandshakeFunc,
+		TCPTransportOpts: opts,
+		shakeHands:       NOPHandshakeFunc,
 	}
 }
 
@@ -51,6 +53,7 @@ func (t *TCPTransport) ListenAndAccept() error {
 	if err != nil {
 		return err
 	}
+	print("Listening on ", t.ListenAddr)
 	go t.startAcceptLoop()
 	return nil
 }
@@ -66,7 +69,6 @@ func (t *TCPTransport) startAcceptLoop() {
 	}
 }
 
-
 func (t *TCPTransport) handleConnection(conn net.Conn) {
 	peer := NewTCPeer(conn, true)
 
@@ -77,11 +79,22 @@ func (t *TCPTransport) handleConnection(conn net.Conn) {
 	}
 
 	msg := &Message{}
+	reader := bufio.NewReader(conn)
+
 	for {
-		if err := t.Decoder.Decode(conn, msg); err != nil {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Printf("failed to read message: %s\n", err)
+			return
+
+		}
+		lineReader := bytes.NewReader([]byte(line))
+
+		if err := t.Decoder.Decode(lineReader, msg); err != nil {
 			fmt.Printf("failed to decode message: %s\n", err)
 			continue
 		}
+		msg.From = conn.RemoteAddr()
 		fmt.Printf("received message: %+v\n", msg)
 	}
 }
