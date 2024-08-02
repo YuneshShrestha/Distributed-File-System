@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,10 +15,10 @@ func TestTCPTransport(t *testing.T) {
 		Decoder:       DefaultDecoder{},
 	}
 	tr := NewTCPTransport(tcpOpts)
-
+	err := tr.ListenAndAccept()
 	// check if the listen address is correct
 	assert.Equal(t, listenAddr, tr.ListenAddr)
 
-	assert.Nil(t, tr.ListenAndAccept())
+	assert.IsType(t, &net.OpError{}, err)
 
 }

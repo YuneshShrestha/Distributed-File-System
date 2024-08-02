@@ -18,7 +18,7 @@ type TCPPeer struct {
 	outbound bool
 }
 
-func NewTCPeer(conn net.Conn, outbound bool) *TCPPeer {
+func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 	return &TCPPeer{
 		conn:     conn,
 		outbound: outbound,
@@ -84,7 +84,7 @@ func (t *TCPTransport) handleConnection(conn net.Conn) {
 		fmt.Printf("closing connection: %s\n", err)
 		conn.Close()
 	}()
-	peer := NewTCPeer(conn, true)
+	peer := NewTCPPeer(conn, true)
 
 	if err := t.HandshakeFunc(peer); err != nil {
 		conn.Close()
