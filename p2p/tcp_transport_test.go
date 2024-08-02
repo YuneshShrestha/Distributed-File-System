@@ -14,8 +14,10 @@ func TestTCPTransport(t *testing.T) {
 		Decoder:       DefaultDecoder{},
 	}
 	tr := NewTCPTransport(tcpOpts)
-	tr.ListenAndAccept()
+
 	// check if the listen address is correct
 	assert.Equal(t, listenAddr, tr.ListenAddr)
+
+	assert.Nil(t, tr.ListenAndAccept())
 
 }

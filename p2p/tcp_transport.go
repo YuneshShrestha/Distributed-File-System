@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"net"
-	"sync"
 )
 
 // TCPPeer repeesents a remote node over a TCP established connection.
@@ -25,35 +25,43 @@ func NewTCPeer(conn net.Conn, outbound bool) *TCPPeer {
 	}
 }
 
+// Close implements the Peer interface, which will close the underlying TCP connection.
+func (p *TCPPeer) Close() error {
+	return p.conn.Close()
+}
+
 type TCPTransportOpts struct {
 	ListenAddr    string
 	HandshakeFunc HandshakeFunc
 	Decoder       Decoder
+	OnPeer        func(Peer) error
 }
 
 type TCPTransport struct {
 	TCPTransportOpts
-	listener   net.Listener
-	shakeHands HandshakeFunc
-	// decoder 	 Decoder
-	mu    sync.RWMutex // RWMutex is a reader/writer mutual exclusion lock.  Mutex will protect the map of peers so they are witten above the field (in our case peers) that they are protecting.
-	peers map[net.Addr]Peer
+	listener net.Listener
+	rpcch    chan RPC
 }
 
 func NewTCPTransport(opts TCPTransportOpts) *TCPTransport {
 	return &TCPTransport{
 		TCPTransportOpts: opts,
-		shakeHands:       NOPHandshakeFunc,
+		rpcch:            make(chan RPC),
 	}
 }
 
+// Consume implements the Transport interface, which will return read-only channel
+// for reading the incoming messages received from another peer in the network.
+func (t *TCPTransport) Consume() <-chan RPC {
+	return t.rpcch
+}
 func (t *TCPTransport) ListenAndAccept() error {
 	var err error
 	t.listener, err = net.Listen("tcp", t.ListenAddr)
 	if err != nil {
 		return err
 	}
-	print("Listening on ", t.ListenAddr)
+	fmt.Printf("listening on %s\n", t.ListenAddr)
 	go t.startAcceptLoop()
 	return nil
 }
@@ -70,6 +78,12 @@ func (t *TCPTransport) startAcceptLoop() {
 }
 
 func (t *TCPTransport) handleConnection(conn net.Conn) {
+	var err error
+
+	defer func() {
+		fmt.Printf("closing connection: %s\n", err)
+		conn.Close()
+	}()
 	peer := NewTCPeer(conn, true)
 
 	if err := t.HandshakeFunc(peer); err != nil {
@@ -78,23 +92,39 @@ func (t *TCPTransport) handleConnection(conn net.Conn) {
 		return
 	}
 
-	msg := &Message{}
+	if t.OnPeer != nil {
+		if err := t.OnPeer(peer); err != nil {
+			fmt.Printf("failed to handle peer: %s\n", err)
+			return
+		}
+	}
+
+	rpc := RPC{}
 	reader := bufio.NewReader(conn)
 
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Printf("failed to read message: %s\n", err)
-			return
 
+			if err == io.EOF {
+				fmt.Printf("peer closed the connection: %s\n", conn.RemoteAddr())
+				return
+			}
+			if opErr, ok := err.(*net.OpError); ok {
+				fmt.Printf("network operation error: %s\n", opErr)
+				// You can add more specific handling for *net.OpError here if needed
+			} else {
+				fmt.Printf("failed to read message: %s\n", err)
+			}
+			return
 		}
 		lineReader := bytes.NewReader([]byte(line))
 
-		if err := t.Decoder.Decode(lineReader, msg); err != nil {
+		if err := t.Decoder.Decode(lineReader, &rpc); err != nil {
 			fmt.Printf("failed to decode message: %s\n", err)
 			continue
 		}
-		msg.From = conn.RemoteAddr()
-		fmt.Printf("received message: %+v\n", msg)
+		rpc.From = conn.RemoteAddr()
+		t.rpcch <- rpc
 	}
 }
