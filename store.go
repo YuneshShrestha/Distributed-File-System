@@ -34,6 +34,13 @@ type PathKey struct {
 	Filename string
 }
 
+func (p PathKey) FirstPathName() string {
+	paths := strings.Split(p.Pathname, "/")
+	if len(paths) == 0 {
+		panic("Pathname is empty")
+	}
+	return paths[0]
+}
 func (p PathKey) FullPath() string {
 	return p.Pathname + "/" + p.Filename
 }
@@ -56,6 +63,19 @@ func NewStore(opts StoreOpts) *Store {
 	}
 }
 
+func (s *Store) Has(key string) bool {
+	pathKey := s.PathTransformFunc(key)
+	_, err := os.Stat(pathKey.FullPath())
+	return err != os.ErrNotExist
+}
+func (s *Store) Delete(key string) error {
+	pathKey := s.PathTransformFunc(key)
+	defer func() {
+		log.Printf("Deleted %s", pathKey.Filename)
+	}()
+
+	return os.RemoveAll(pathKey.FirstPathName())
+}
 func (s *Store) writeStream(key string, r io.Reader) error {
 	pathKey := s.PathTransformFunc(key)
 	if err := os.MkdirAll(pathKey.Pathname, os.ModePerm); err != nil {
@@ -64,6 +84,11 @@ func (s *Store) writeStream(key string, r io.Reader) error {
 
 	pathAndFilename := pathKey.FullPath()
 	f, err := os.Create(pathAndFilename)
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("Error closing file: %v", err)
+		}
+	}()
 	if err != nil {
 		return err
 	}
@@ -81,6 +106,11 @@ func (s *Store) Read(key string) (io.Reader, error) {
 		return nil, err
 	}
 	buf := new(bytes.Buffer)
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("Error closing file: %v", err)
+		}
+	}()
 	_, err = io.Copy(buf, f)
 	if err != nil {
 		return nil, err

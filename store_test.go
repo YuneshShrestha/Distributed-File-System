@@ -19,6 +19,26 @@ func TestPathTransformFunc(t *testing.T) {
 		t.Fatalf("Expected %s, got %s", expectedOriginalKey, pathKey.Filename)
 	}
 }
+
+func TestStoreDeleteKey(t *testing.T) {
+	opts := StoreOpts{
+		PathTransformFunc: CASPathTransformFunc,
+	}
+	s := NewStore(opts)
+	key := "myfavs"
+	data := []byte("Hello Worlds")
+	if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
+		t.Fatal(err)
+	}
+
+	if !s.Has(key) {
+		t.Fatal("Expected key to exist")
+	}
+
+	if err := s.Delete(key); err != nil {
+		t.Fatal(err)
+	}
+}
 func TestStore(t *testing.T) {
 	opts := StoreOpts{
 		PathTransformFunc: CASPathTransformFunc,
