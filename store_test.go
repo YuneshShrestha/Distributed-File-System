@@ -2,7 +2,10 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+
+	// "io"
 	"testing"
 )
 
@@ -52,6 +55,9 @@ func TestStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if ok := s.Has(key); !ok {
+		t.Fatal("Expected key to exist")
+	}
 	r, err := s.Read(key)
 	if err != nil {
 		t.Fatal(err)
@@ -63,5 +69,8 @@ func TestStore(t *testing.T) {
 	if string(b) != string(data) {
 		t.Fatalf("Expected %s, got %s", "Hello Worlds", string(b))
 	}
+	fmt.Println(string(b))
+
+	s.Delete(key)
 
 }
