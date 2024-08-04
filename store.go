@@ -83,6 +83,10 @@ func (s *Store) Has(key string) bool {
 	_, err := os.Stat(fullPathWithRoot)
 	return err != os.ErrNotExist
 }
+
+func (s *Store) Clear() error {
+	return os.RemoveAll(s.Root)
+}
 func (s *Store) Delete(key string) error {
 	pathKey := s.PathTransformFunc(key)
 	defer func() {
@@ -92,6 +96,7 @@ func (s *Store) Delete(key string) error {
 	return os.RemoveAll(firstPathNameWithRoot)
 }
 func (s *Store) writeStream(key string, r io.Reader) error {
+	// PathTransformFunc is a function that takes a key and returns a PathKey
 	pathKey := s.PathTransformFunc(key)
 	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.Pathname)
 	if err := os.MkdirAll(pathNameWithRoot, os.ModePerm); err != nil {
@@ -100,6 +105,7 @@ func (s *Store) writeStream(key string, r io.Reader) error {
 	fullPathWithRoot := fmt.Sprintf("%s/%s", pathNameWithRoot, pathKey.Filename)
 	f, err := os.Create(fullPathWithRoot)
 	defer func() {
+
 		if err := f.Close(); err != nil {
 			log.Printf("Error closing file: %v", err)
 		}

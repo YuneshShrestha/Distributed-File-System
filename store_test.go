@@ -24,10 +24,9 @@ func TestPathTransformFunc(t *testing.T) {
 }
 
 func TestStoreDeleteKey(t *testing.T) {
-	opts := StoreOpts{
-		PathTransformFunc: CASPathTransformFunc,
-	}
-	s := NewStore(opts)
+	s := newStore()
+	defer teardown(t, s)
+
 	key := "myfavs"
 	data := []byte("Hello Worlds")
 	if err := s.writeStream(key, bytes.NewReader(data)); err != nil {
@@ -43,34 +42,52 @@ func TestStoreDeleteKey(t *testing.T) {
 	}
 }
 func TestStore(t *testing.T) {
+	s := newStore()
+	defer teardown(t, s)
+	for i := 0; i < 50; i++ {
+		key := fmt.Sprintf("key-%d", i)
+
+		data := []byte("Hello Worlds")
+		err := s.writeStream(key, bytes.NewReader(data))
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok := s.Has(key); !ok {
+			t.Fatal("Expected key to exist")
+		}
+		r, err := s.Read(key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(b) != string(data) {
+			t.Fatalf("Expected %s, got %s", "Hello Worlds", string(b))
+		}
+		fmt.Println(string(b))
+
+		if err := s.Delete(key); err != nil {
+			t.Fatal(err)
+		}
+
+		if ok := s.Has(key); !ok {
+			t.Fatal("Expected key to not exist")
+		}
+	}
+
+}
+func newStore() *Store {
 	opts := StoreOpts{
 		PathTransformFunc: CASPathTransformFunc,
 	}
-	s := NewStore(opts)
-	key := "myfavs"
+	return NewStore(opts)
+}
 
-	data := []byte("Hello Worlds")
-	err := s.writeStream(key, bytes.NewReader(data))
-
-	if err != nil {
-		t.Fatal(err)
+func teardown(t *testing.T, s *Store) {
+	if err := s.Clear(); err != nil {
+		t.Error(err)
 	}
-	if ok := s.Has(key); !ok {
-		t.Fatal("Expected key to exist")
-	}
-	r, err := s.Read(key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(b) != string(data) {
-		t.Fatalf("Expected %s, got %s", "Hello Worlds", string(b))
-	}
-	fmt.Println(string(b))
-
-	s.Delete(key)
-
 }
