@@ -3,6 +3,7 @@ package p2p
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -43,6 +44,11 @@ type TCPTransport struct {
 	rpcch    chan RPC
 }
 
+// Close implements the Transport interface, which will close the underlying TCP connection.
+func (t *TCPTransport) Close() error {
+	return t.listener.Close()
+}
+
 func NewTCPTransport(opts TCPTransportOpts) *TCPTransport {
 	return &TCPTransport{
 		TCPTransportOpts: opts,
@@ -63,16 +69,23 @@ func (t *TCPTransport) ListenAndAccept() error {
 	}
 	fmt.Printf("listening on %s\n", t.ListenAddr)
 	go t.startAcceptLoop()
+
 	return nil
 }
 
 func (t *TCPTransport) startAcceptLoop() {
 	for {
 		conn, err := t.listener.Accept()
+		if errors.Is(err, net.ErrClosed) {
+			fmt.Println("listener closed")
+
+		}
 		if err != nil {
 			fmt.Printf("TCP accept error: %s \n", err)
-			continue
+
 		}
+		fmt.Printf("new incomming connection: %s\n", conn.RemoteAddr())
+
 		go t.handleConnection(conn)
 	}
 }
