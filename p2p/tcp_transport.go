@@ -26,6 +26,18 @@ func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 	}
 }
 
+// Send implements the Peer interface, which will send a message to the remote peer.
+func (p *TCPPeer) Send(data []byte) error {
+	_, err := p.conn.Write(data)
+	return err
+}
+
+// RemoteAddr implements the Peer interface, which will return the remote address of the peer.
+
+func (p *TCPPeer) RemoteAddr() net.Addr {
+	return p.conn.RemoteAddr()
+}
+
 // Close implements the Peer interface, which will close the underlying TCP connection.
 func (p *TCPPeer) Close() error {
 	return p.conn.Close()
@@ -35,7 +47,7 @@ type TCPTransportOpts struct {
 	ListenAddr    string
 	HandshakeFunc HandshakeFunc
 	Decoder       Decoder
-	OnPeer        func(Peer) error
+	OnPeer        func(*TCPPeer) error
 }
 
 type TCPTransport struct {
@@ -60,6 +72,16 @@ func NewTCPTransport(opts TCPTransportOpts) *TCPTransport {
 // for reading the incoming messages received from another peer in the network.
 func (t *TCPTransport) Consume() <-chan RPC {
 	return t.rpcch
+}
+
+// Dial implements the Transport interface, which will dial a remote node in the network.
+func (t *TCPTransport) Dial(addr string) error {
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		return err
+	}
+	go t.handleConnection(conn, true)
+	return nil
 }
 func (t *TCPTransport) ListenAndAccept() error {
 	var err error
@@ -86,18 +108,18 @@ func (t *TCPTransport) startAcceptLoop() {
 		}
 		fmt.Printf("new incomming connection: %s\n", conn.RemoteAddr())
 
-		go t.handleConnection(conn)
+		go t.handleConnection(conn, false)
 	}
 }
 
-func (t *TCPTransport) handleConnection(conn net.Conn) {
+func (t *TCPTransport) handleConnection(conn net.Conn, outbound bool) {
 	var err error
 
 	defer func() {
 		fmt.Printf("closing connection: %s\n", err)
 		conn.Close()
 	}()
-	peer := NewTCPPeer(conn, true)
+	peer := NewTCPPeer(conn, outbound)
 
 	if err := t.HandshakeFunc(peer); err != nil {
 		conn.Close()
