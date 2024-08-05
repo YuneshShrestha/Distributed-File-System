@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
+	"io"
 	"log"
 	"sync"
 
@@ -69,6 +72,41 @@ func NewFileServer(opts FileServerOpts) *FileServer {
 		quitch:         make(chan struct{}),
 		peers:          make(map[string]p2p.Peer),
 	}
+}
+
+type Payload struct {
+	Key  string
+	Data []byte
+}
+
+func (s *FileServer) boardCast(p Payload) error {
+	peers := make([]io.Writer, 0)
+
+	for _, peer := range s.peers {
+		peers = append(peers, peer)
+	}
+	mw := io.MultiWriter(peers...)
+	return gob.NewEncoder(mw).Encode(p)
+}
+func (s *FileServer) StoreData(key string, r io.Reader) error {
+
+	if err := s.store.Write(key, r); err != nil {
+		fmt.Println("Error storing data: ", err)
+		return err
+	}
+	buf := new(bytes.Buffer)
+	_, err := io.Copy(buf, r)
+	if err != nil {
+		fmt.Println("Error copying data to buffer: ", err)
+		return err
+	}
+	p := Payload{
+		Key:  key,
+		Data: buf.Bytes(),
+	}
+	fmt.Println("Storing data: ", buf.Bytes())
+	return s.boardCast(p)
+
 }
 func (s *FileServer) bootstrapNetwork() error {
 	for _, addr := range s.BootstrapNodes {

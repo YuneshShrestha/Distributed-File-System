@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"log"
+	"time"
 
 	"github.com/YuneshShrestha/Distributed-File-System-Codes/p2p"
 )
 
-func makeServer(listenAddr string, nodes ...string) *FileServer {
+func makeServer(listenAddr string, root string, nodes ...string) *FileServer {
 	tcpTransportOpts := p2p.TCPTransportOpts{
 		ListenAddr:    listenAddr,
 		HandshakeFunc: p2p.NOPHandshakeFunc,
@@ -15,7 +17,7 @@ func makeServer(listenAddr string, nodes ...string) *FileServer {
 	tcpTransport := p2p.NewTCPTransport(tcpTransportOpts)
 	fileServerOpts := FileServerOpts{
 		Transport:         tcpTransport,
-		StorageRoot:       listenAddr + "_network",
+		StorageRoot:       root + "_network",
 		PathTransformFunc: CASPathTransformFunc,
 		BootstrapNodes:    nodes,
 	}
@@ -28,12 +30,17 @@ func makeServer(listenAddr string, nodes ...string) *FileServer {
 }
 
 func main() {
-	server1 := makeServer(":8080")
-	server2 := makeServer(":8081", ":8080")
+	server1 := makeServer(":8080", "8080")
+	server2 := makeServer(":8081", "8081", ":8080")
 
 	go func() {
 		log.Fatal(server1.Start())
 	}()
 
-	server2.Start()
+	go server2.Start()
+	time.Sleep(1 * time.Second)
+
+	data := bytes.NewReader([]byte("Hello World!"))
+	server2.StoreData("test", data)
+	select {}
 }
