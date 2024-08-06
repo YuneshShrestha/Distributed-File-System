@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/YuneshShrestha/Distributed-File-System-Codes/p2p"
 )
@@ -51,9 +52,35 @@ func (s *FileServer) loop() {
 		s.Transport.Close()
 	}()
 	for {
+
 		select {
-		case msg := <-s.Transport.Consume():
-			fmt.Println("Received message: ", msg)
+		case rpc := <-s.Transport.Consume():
+			// Received payload from peer
+			fmt.Println("re message: ", bytes.NewReader(rpc.Payload))
+
+			var msg Message
+
+			if err := gob.NewDecoder(bytes.NewReader(rpc.Payload)).Decode(&msg); err != nil {
+				log.Println("Failed to decode message: ", err)
+				continue
+			}
+			fmt.Printf("Received message: %s\n", string(msg.Payload.([]byte)))
+
+			peer, ok := s.peers[rpc.From]
+			if !ok {
+				log.Println("Peer not found: ", rpc.From)
+				continue
+			}
+
+			b := make([]byte, 1000)
+			n, err := peer.Read(b)
+			if err != nil {
+				log.Println("Failed to read from peer: ", err)
+				continue
+			}
+			fmt.Println("Received data: ", string(b[:n]))
+			peer.(*p2p.TCPPeer).Wg.Done()
+
 		case <-s.quitch:
 			return
 
@@ -74,38 +101,67 @@ func NewFileServer(opts FileServerOpts) *FileServer {
 	}
 }
 
-type Payload struct {
+type Message struct {
+	From    string
+	Payload any
+}
+
+type DataMessage struct {
 	Key  string
 	Data []byte
 }
 
-func (s *FileServer) boardCast(p Payload) error {
-	peers := make([]io.Writer, 0)
+func (s *FileServer) boardCast(p *Message) error {
+	peers := []io.Writer{}
 
 	for _, peer := range s.peers {
 		peers = append(peers, peer)
 	}
 	mw := io.MultiWriter(peers...)
+
 	return gob.NewEncoder(mw).Encode(p)
 }
 func (s *FileServer) StoreData(key string, r io.Reader) error {
-
-	if err := s.store.Write(key, r); err != nil {
-		fmt.Println("Error storing data: ", err)
-		return err
-	}
 	buf := new(bytes.Buffer)
-	_, err := io.Copy(buf, r)
-	if err != nil {
-		fmt.Println("Error copying data to buffer: ", err)
+	msg := Message{
+		Payload: []byte("storageKey"),
+	}
+
+	if err := gob.NewEncoder(buf).Encode(msg); err != nil {
+
 		return err
 	}
-	p := Payload{
-		Key:  key,
-		Data: buf.Bytes(),
+	// Sent payload to all peers
+	fmt.Println("Sending message: ", msg.Payload)
+	// Decoding the message
+	// var msg2 Message
+	// if err := gob.NewDecoder(buf).Decode(&msg2); err != nil {
+	// 	return err
+	// }
+	// fmt.Println("Decoded message: ", string(msg2.Payload.([]byte)))
+	for _, peer := range s.peers {
+		fmt.Println("Byrtes: ", buf.Bytes())
+		if err := peer.Send(buf.Bytes()); err != nil {
+			return err
+		}
 	}
-	fmt.Println("Storing data: ", buf.Bytes())
-	return s.boardCast(p)
+	time.Sleep(3 * time.Second)
+	payload := []byte("This is a test")
+	for _, peer := range s.peers {
+		if err := peer.Send(payload); err != nil {
+			return err
+		}
+	}
+	return nil
+
+}
+
+func (s *FileServer) handleMessage(msg *Message) error {
+	switch v := msg.Payload.(type) {
+	case *DataMessage:
+		fmt.Println("Received data message: ", v)
+	}
+	return nil
 
 }
 func (s *FileServer) bootstrapNetwork() error {

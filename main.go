@@ -30,17 +30,18 @@ func makeServer(listenAddr string, root string, nodes ...string) *FileServer {
 }
 
 func main() {
-	server1 := makeServer(":8080", "8080")
-	server2 := makeServer(":8081", "8081", ":8080")
+
+	server1 := makeServer(":3000", "3000")
+	server2 := makeServer(":4000", "4000", ":3000")
 
 	go func() {
 		log.Fatal(server1.Start())
 	}()
-
+	time.Sleep(4 * time.Second)
 	go server2.Start()
-	time.Sleep(1 * time.Second)
+	time.Sleep(4 * time.Second)
+	data := bytes.NewReader([]byte("My data file here"))
+	server2.StoreData("private", data)
 
-	data := bytes.NewReader([]byte("Hello World!"))
-	server2.StoreData("test", data)
 	select {}
 }

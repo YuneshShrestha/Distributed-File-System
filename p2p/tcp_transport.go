@@ -3,10 +3,12 @@ package p2p
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"sync"
 )
 
 // TCPPeer repeesents a remote node over a TCP established connection.
@@ -17,21 +19,39 @@ type TCPPeer struct {
 	// if we are the dialer, outbound will be true.
 	// if we are the listener, outbound will be false.
 	outbound bool
+	Wg       *sync.WaitGroup
 }
 
 func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 	return &TCPPeer{
 		Conn:     conn,
 		outbound: outbound,
+		Wg:       &sync.WaitGroup{},
 	}
 }
 
 // Send implements the Peer interface, which will send a message to the remote peer.
 func (p *TCPPeer) Send(data []byte) error {
-	_, err := p.Conn.Write(data)
+	fmt.Println("Sending data to peer:", data)
+
+	// Create a buffer to hold the length prefix and the data
+	var buf bytes.Buffer
+
+	// Write the length of the data as a 4-byte integer
+	length := int32(len(data))
+	if err := binary.Write(&buf, binary.BigEndian, length); err != nil {
+		return err
+	}
+
+	// Write the actual data
+	if _, err := buf.Write(data); err != nil {
+		return err
+	}
+
+	// Send the buffer contents
+	_, err := p.Conn.Write(buf.Bytes())
 	return err
 }
-
 
 type TCPTransportOpts struct {
 	ListenAddr    string
@@ -128,28 +148,36 @@ func (t *TCPTransport) handleConnection(conn net.Conn, outbound bool) {
 	reader := bufio.NewReader(conn)
 
 	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-
+		// Read the length of the incoming message
+		var length int32
+		if err := binary.Read(reader, binary.BigEndian, &length); err != nil {
 			if err == io.EOF {
 				fmt.Printf("peer closed the connection: %s\n", conn.RemoteAddr())
 				return
 			}
-			if opErr, ok := err.(*net.OpError); ok {
-				fmt.Printf("network operation error: %s\n", opErr)
-				// You can add more specific handling for *net.OpError here if needed
-			} else {
-				fmt.Printf("failed to read message: %s\n", err)
-			}
+			fmt.Printf("failed to read message length: %s\n", err)
 			return
 		}
-		lineReader := bytes.NewReader([]byte(line))
+
+		// Read the actual message based on the length
+		message := make([]byte, length)
+		if _, err := io.ReadFull(reader, message); err != nil {
+			fmt.Printf("failed to read message: %s\n", err)
+			return
+		}
+
+		lineReader := bytes.NewReader(message)
 
 		if err := t.Decoder.Decode(lineReader, &rpc); err != nil {
 			fmt.Printf("failed to decode message: %s\n", err)
 			continue
 		}
-		rpc.From = conn.RemoteAddr()
+		rpc.From = conn.RemoteAddr().String()
+		peer.Wg.Add(1)
+		fmt.Println("Waiting for the peer to read the message")
 		t.rpcch <- rpc
+
+		peer.Wg.Wait()
+		fmt.Println("Peer has read the message")
 	}
 }
