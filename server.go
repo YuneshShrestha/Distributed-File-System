@@ -56,7 +56,6 @@ func (s *FileServer) loop() {
 		select {
 		case rpc := <-s.Transport.Consume():
 			// Received payload from peer
-			fmt.Println("re message: ", bytes.NewReader(rpc.Payload))
 
 			var msg Message
 
@@ -64,7 +63,7 @@ func (s *FileServer) loop() {
 				log.Println("Failed to decode message: ", err)
 				continue
 			}
-			fmt.Printf("Received message: %s\n", string(msg.Payload.([]byte)))
+			fmt.Println("Received message: ", string(msg.Payload.([]byte)))
 
 			peer, ok := s.peers[rpc.From]
 			if !ok {
@@ -131,16 +130,7 @@ func (s *FileServer) StoreData(key string, r io.Reader) error {
 
 		return err
 	}
-	// Sent payload to all peers
-	fmt.Println("Sending message: ", msg.Payload)
-	// Decoding the message
-	// var msg2 Message
-	// if err := gob.NewDecoder(buf).Decode(&msg2); err != nil {
-	// 	return err
-	// }
-	// fmt.Println("Decoded message: ", string(msg2.Payload.([]byte)))
 	for _, peer := range s.peers {
-		fmt.Println("Byrtes: ", buf.Bytes())
 		if err := peer.Send(buf.Bytes()); err != nil {
 			return err
 		}

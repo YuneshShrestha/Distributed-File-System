@@ -32,7 +32,6 @@ func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 
 // Send implements the Peer interface, which will send a message to the remote peer.
 func (p *TCPPeer) Send(data []byte) error {
-	fmt.Println("Sending data to peer:", data)
 
 	// Create a buffer to hold the length prefix and the data
 	var buf bytes.Buffer
