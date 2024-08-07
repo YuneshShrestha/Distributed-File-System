@@ -95,12 +95,12 @@ func (s *Store) Delete(key string) error {
 	firstPathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.FirstPathName())
 	return os.RemoveAll(firstPathNameWithRoot)
 }
-func (s *Store) writeStream(key string, r io.Reader) error {
+func (s *Store) writeStream(key string, r io.Reader) (int, error) {
 	// PathTransformFunc is a function that takes a key and returns a PathKey
 	pathKey := s.PathTransformFunc(key)
 	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.Pathname)
 	if err := os.MkdirAll(pathNameWithRoot, os.ModePerm); err != nil {
-		return err
+		return 0, err
 	}
 	fullPathWithRoot := fmt.Sprintf("%s/%s", pathNameWithRoot, pathKey.Filename)
 	f, err := os.Create(fullPathWithRoot)
@@ -111,17 +111,16 @@ func (s *Store) writeStream(key string, r io.Reader) error {
 		}
 	}()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	n, err := io.Copy(f, r)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	log.Printf("wrote %d bytes to %s", n, fullPathWithRoot)
-	return nil
+	return int(n), nil
 }
 
-func (s *Store) Write(key string, r io.Reader) error {
+func (s *Store) Write(key string, r io.Reader) (int, error) {
 	return s.writeStream(key, r)
 }
 func (s *Store) Read(key string) (io.Reader, error) {

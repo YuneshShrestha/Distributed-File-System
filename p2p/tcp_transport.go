@@ -177,6 +177,6 @@ func (t *TCPTransport) handleConnection(conn net.Conn, outbound bool) {
 		t.rpcch <- rpc
 
 		peer.Wg.Wait()
-		fmt.Println("Peer has read the message")
+		fmt.Println("Stream Done continue normal reading")
 	}
 }
