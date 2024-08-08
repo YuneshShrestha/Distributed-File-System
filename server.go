@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"sync"
-	"time"
 
 	"github.com/YuneshShrestha/Distributed-File-System-Codes/p2p"
 )
@@ -169,10 +168,12 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 		fmt.Println("Error broadcasting message: ", err)
 		return nil, err
 	}
-	time.Sleep(2 * time.Second)
 
 	for _, peer := range s.peers {
-		n, err := s.store.Write(key, io.LimitReader(peer, 22))
+		fmt.Println("Receiving file from peer: ", peer.RemoteAddr())
+		n, err := s.store.Write(key, io.LimitReader(peer, 5))
+		// time.Sleep(4 * time.Second)
+		fmt.Println("Receiving file from peer: ", peer.RemoteAddr())
 		if err != nil {
 			fmt.Println("Error writing to store: ", err)
 			return nil, err
@@ -205,8 +206,7 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 		fmt.Println("Error broadcasting message: ", err)
 		return err
 	}
-	time.Sleep(5 * time.Second)
-	print("Here")
+
 	// TODO: use multiwriter to write to all peers
 	for _, peer := range s.peers {
 		fmt.Println("Received message from peer: ", peer.RemoteAddr())
