@@ -19,15 +19,20 @@ type TCPPeer struct {
 	// if we are the dialer, outbound will be true.
 	// if we are the listener, outbound will be false.
 	outbound bool
-	Wg       *sync.WaitGroup
+	wg       *sync.WaitGroup
 }
 
 func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 	return &TCPPeer{
 		Conn:     conn,
 		outbound: outbound,
-		Wg:       &sync.WaitGroup{},
+		wg:       &sync.WaitGroup{},
 	}
+}
+
+// CloseStream implements the Peer interface, which will close the underlying TCP connection.
+func (p *TCPPeer) CloseStream() error {
+	return p.Conn.Close()
 }
 
 // Send implements the Peer interface, which will send a message to the remote peer.
@@ -75,6 +80,11 @@ func NewTCPTransport(opts TCPTransportOpts) *TCPTransport {
 		TCPTransportOpts: opts,
 		rpcch:            make(chan RPC),
 	}
+}
+
+// Addr implements the Transport interface, which will return the address of the listener.
+func (t *TCPTransport) Addr() string {
+	return t.ListenAddr
 }
 
 // Consume implements the Transport interface, which will return read-only channel
@@ -172,11 +182,11 @@ func (t *TCPTransport) handleConnection(conn net.Conn, outbound bool) {
 			continue
 		}
 		rpc.From = conn.RemoteAddr().String()
-		peer.Wg.Add(1)
+		peer.wg.Add(1)
 		fmt.Println("Waiting for the peer to read the message")
 		t.rpcch <- rpc
 
-		peer.Wg.Wait()
+		peer.wg.Wait()
 		fmt.Println("Stream Done continue normal reading")
 	}
 }

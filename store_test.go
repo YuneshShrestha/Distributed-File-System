@@ -56,7 +56,7 @@ func TestStore(t *testing.T) {
 		if ok := s.Has(key); !ok {
 			t.Fatal("Expected key to exist")
 		}
-		r, err := s.Read(key)
+		_, r, err := s.Read(key)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -73,7 +73,7 @@ func TestStore(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if ok := s.Has(key); !ok {
+		if ok := s.Has(key); ok {
 			t.Fatal("Expected key to not exist")
 		}
 	}

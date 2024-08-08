@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/gob"
 	"fmt"
 	"io"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/YuneshShrestha/Distributed-File-System-Codes/p2p"
 )
@@ -152,7 +154,11 @@ func (s *FileServer) boardCast(msg *Message) error {
 func (s *FileServer) Get(key string) (io.Reader, error) {
 	fmt.Println("Getting file: ", key)
 	if s.store.Has(key) {
-		return s.store.Read(key)
+		_, r, err := s.store.Read(key)
+		if err != nil {
+			return nil, err
+		}
+		return r, nil
 	}
 	fmt.Println("File not found in local store, broadcasting request...")
 	msg := Message{
@@ -164,14 +170,26 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 		fmt.Println("Error broadcasting message: ", err)
 		return nil, err
 	}
+	time.Sleep(1 * time.Second)
 	for _, peer := range s.peers {
-		fileBuff := new(bytes.Buffer)
-		n, err := io.Copy(fileBuff, peer)
+		//read the file size from the peer
+		var fileSize int64
+		err := binary.Read(peer, binary.LittleEndian, &fileSize)
 		if err != nil {
+			fmt.Println("Error reading file size: ", err)
+			return nil, err
+		}
+		fmt.Println("Receiving file from peer: ", peer.RemoteAddr())
+		n, err := s.store.Write(key, io.LimitReader(peer, fileSize))
+		print("Received data from peer: ", n)
+		// time.Sleep(4 * time.Second)
+		fmt.Println("Receiving file from peer: ", peer.RemoteAddr())
+		if err != nil {
+			fmt.Println("Error writing to store: ", err)
 			return nil, err
 		}
 		fmt.Println("Received data from peer: ", n)
-		fmt.Println(fileBuff.String())
+		peer.CloseStream()
 	}
 
 	select {}
@@ -229,8 +247,15 @@ func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error
 
 		return fmt.Errorf("need to serve file: %s but it does not exist even in disk", msg.Key)
 	}
-	fmt.Printf("serving file (%s) over network\n", msg.Key)
-	r, err := s.store.Read(msg.Key)
+	fmt.Printf("[%s] serving file (%s) over network\n", s.Transport.Addr(), msg.Key)
+
+	fileSize, r, err := s.store.Read(msg.Key)
+
+	if rc, ok := r.(io.ReadCloser); ok {
+		fmt.Println("Closing the file reader")
+		defer rc.Close()
+	}
+
 	if err != nil {
 		fmt.Println("Error reading file: ", err)
 	}
@@ -238,12 +263,14 @@ func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error
 	if !ok {
 		return fmt.Errorf("peer not found: %s", from)
 	}
+
+	binary.Write(peer, binary.LittleEndian, fileSize) // send the file size to the peer
 	n, err := io.Copy(peer, r)
 	if err != nil {
+		fmt.Println("Error sending file to peer: ", err)
 		return err
 	}
-	fmt.Println("Sent data to peer: ", n)
-	peer.(*p2p.TCPPeer).Wg.Done()
+	fmt.Printf("[%s] sent (%d) data over the network to (%s)\n", s.Transport.Addr(), n, peer.RemoteAddr())
 	return nil
 }
 func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) error {
@@ -260,7 +287,7 @@ func (s *FileServer) handleMessageStoreFile(from string, msg MessageStoreFile) e
 		return err
 	}
 	fmt.Println("Received data from peer: ", n)
-	peer.(*p2p.TCPPeer).Wg.Done()
+	peer.CloseStream()
 	return nil
 
 }
