@@ -79,9 +79,11 @@ func NewStore(opts StoreOpts) *Store {
 
 func (s *Store) Has(key string) bool {
 	pathKey := s.PathTransformFunc(key)
+
 	fullPathWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.FullPath())
 	_, err := os.Stat(fullPathWithRoot)
-	return err != os.ErrNotExist
+	// check if file exists
+	return err == nil
 }
 
 func (s *Store) Clear() error {
@@ -106,9 +108,7 @@ func (s *Store) writeStream(key string, r io.Reader) (int, error) {
 	f, err := os.Create(fullPathWithRoot)
 	defer func() {
 
-		if err := f.Close(); err != nil {
-			log.Printf("Error closing file: %v", err)
-		}
+		f.Close()
 	}()
 	if err != nil {
 		return 0, err
@@ -130,9 +130,7 @@ func (s *Store) Read(key string) (io.Reader, error) {
 	}
 	buf := new(bytes.Buffer)
 	defer func() {
-		if err := f.Close(); err != nil {
-			log.Printf("Error closing file: %v", err)
-		}
+		f.Close()
 	}()
 	_, err = io.Copy(buf, f)
 	if err != nil {

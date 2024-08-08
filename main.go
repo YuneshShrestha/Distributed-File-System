@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"time"
 
@@ -37,11 +38,17 @@ func main() {
 	go func() {
 		log.Fatal(server1.Start())
 	}()
-	time.Sleep(4 * time.Second)
+	time.Sleep(2 * time.Second)
 	go server2.Start()
-	time.Sleep(4 * time.Second)
-	data := bytes.NewReader([]byte("My data file here"))
-	server2.StoreData("private", data)
+	time.Sleep(2 * time.Second)
+	for i := 0; i < 10; i++ {
+		data := bytes.NewReader([]byte("My data file here"))
+
+		server2.Store(fmt.Sprintf("private%d", i), data)
+
+		time.Sleep(1 * time.Second)
+	}
+	
 
 	select {}
 }
