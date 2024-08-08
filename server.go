@@ -57,7 +57,6 @@ func (s *FileServer) loop() {
 		case rpc := <-s.Transport.Consume():
 
 			// Received payload from peer
-			fmt.Println("Received payload from peer: ", rpc.Payload)
 
 			var msg Message
 
@@ -148,7 +147,7 @@ func (s *FileServer) boardCast(msg *Message) error {
 	}
 	for _, peer := range s.peers {
 		peer.Send([]byte{p2p.IncomingMessage})
-		fmt.Println("Sending ...: ", msgBuf.Bytes())
+
 		if err := peer.Send(msgBuf.Bytes()); err != nil {
 			return err
 		}
@@ -156,7 +155,7 @@ func (s *FileServer) boardCast(msg *Message) error {
 	return nil
 }
 func (s *FileServer) Get(key string) (io.Reader, error) {
-	fmt.Println("Getting file: ", key, s.store.Has(key))
+	fmt.Println("Getting file: ", key)
 	if s.store.Has(key) {
 		return s.store.Read(key)
 	}
@@ -173,12 +172,13 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 	time.Sleep(2 * time.Second)
 
 	for _, peer := range s.peers {
-	n, err := s.store.Write(key, io.LimitReader(peer, 22))
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println("Received data from peer: ", n)
-	peer.CloseStream()
+		n, err := s.store.Write(key, io.LimitReader(peer, 22))
+		if err != nil {
+			fmt.Println("Error writing to store: ", err)
+			return nil, err
+		}
+		fmt.Println("Received data from peer: ", n)
+		peer.CloseStream()
 	}
 
 	select {}
@@ -205,9 +205,11 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 		fmt.Println("Error broadcasting message: ", err)
 		return err
 	}
-
+	time.Sleep(5 * time.Second)
+	print("Here")
 	// TODO: use multiwriter to write to all peers
 	for _, peer := range s.peers {
+		fmt.Println("Received message from peer: ", peer.RemoteAddr())
 		n, err := io.Copy(peer, filebuf)
 		if err != nil {
 			return err
