@@ -3,6 +3,10 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
+
+	// "fmt"
+	// "io"
 	"log"
 	"time"
 
@@ -41,14 +45,20 @@ func main() {
 	time.Sleep(2 * time.Second)
 	go server2.Start()
 	time.Sleep(2 * time.Second)
-	for i := 0; i < 10; i++ {
-		data := bytes.NewReader([]byte("My data file here"))
+	// // for i := 0; i < 10; i++ {
+	// data := bytes.NewReader([]byte("My data file here"))
 
-		server2.Store(fmt.Sprintf("private%d", i), data)
+	// server2.Store("coolPics", data)
 
-		time.Sleep(1 * time.Second)
+	// time.Sleep(1 * time.Second)
+	// }
+	r, err := server2.Get("coolPics")
+	if err != nil {
+		log.Fatal(err)
 	}
-	
+	buf := new(bytes.Buffer)
+	io.Copy(buf, r)
+	fmt.Println(buf.String())
 
 	select {}
 }

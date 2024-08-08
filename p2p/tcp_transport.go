@@ -1,12 +1,9 @@
 package p2p
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
+
 	"net"
 	"sync"
 )
@@ -19,36 +16,23 @@ type TCPPeer struct {
 	// if we are the dialer, outbound will be true.
 	// if we are the listener, outbound will be false.
 	outbound bool
-	Wg       *sync.WaitGroup
+	wg       *sync.WaitGroup
 }
 
 func NewTCPPeer(conn net.Conn, outbound bool) *TCPPeer {
 	return &TCPPeer{
 		Conn:     conn,
 		outbound: outbound,
-		Wg:       &sync.WaitGroup{},
+		wg:       &sync.WaitGroup{},
 	}
 }
+func (p *TCPPeer) CloseStream() {
+	p.wg.Done()
+}
 
-// Send implements the Peer interface, which will send a message to the remote peer.
-func (p *TCPPeer) Send(data []byte) error {
-
-	// Create a buffer to hold the length prefix and the data
-	var buf bytes.Buffer
-
-	// Write the length of the data as a 4-byte integer
-	length := int32(len(data))
-	if err := binary.Write(&buf, binary.BigEndian, length); err != nil {
-		return err
-	}
-
-	// Write the actual data
-	if _, err := buf.Write(data); err != nil {
-		return err
-	}
-
-	// Send the buffer contents
-	_, err := p.Conn.Write(buf.Bytes())
+// Send implements the Peer interface, which will send the message to the remote node.
+func (p *TCPPeer) Send(b []byte) error {
+	_, err := p.Conn.Write(b)
 	return err
 }
 
@@ -81,6 +65,11 @@ func NewTCPTransport(opts TCPTransportOpts) *TCPTransport {
 // for reading the incoming messages received from another peer in the network.
 func (t *TCPTransport) Consume() <-chan RPC {
 	return t.rpcch
+}
+
+// Addr implements the Transport interface, which will return the address of the current node in the network.
+func (t *TCPTransport) Addr() string {
+	return t.ListenAddr
 }
 
 // Dial implements the Transport interface, which will dial a remote node in the network.
@@ -125,58 +114,40 @@ func (t *TCPTransport) handleConnection(conn net.Conn, outbound bool) {
 	var err error
 
 	defer func() {
-		fmt.Printf("closing connection: %s\n", err)
+		fmt.Printf("dropping peer connection: %s", err)
 		conn.Close()
 	}()
+
 	peer := NewTCPPeer(conn, outbound)
 
-	if err := t.HandshakeFunc(peer); err != nil {
-		conn.Close()
-		fmt.Printf("failed to shake hands: %s\n", err)
+	if err = t.HandshakeFunc(peer); err != nil {
 		return
 	}
 
 	if t.OnPeer != nil {
-		if err := t.OnPeer(peer); err != nil {
-			fmt.Printf("failed to handle peer: %s\n", err)
+		if err = t.OnPeer(peer); err != nil {
 			return
 		}
 	}
 
-	rpc := RPC{}
-	reader := bufio.NewReader(conn)
-
+	// Read loop
 	for {
-		// Read the length of the incoming message
-		var length int32
-		if err := binary.Read(reader, binary.BigEndian, &length); err != nil {
-			if err == io.EOF {
-				fmt.Printf("peer closed the connection: %s\n", conn.RemoteAddr())
-				return
-			}
-			fmt.Printf("failed to read message length: %s\n", err)
+		rpc := RPC{}
+		err = t.Decoder.Decode(conn, &rpc)
+		if err != nil {
 			return
 		}
 
-		// Read the actual message based on the length
-		message := make([]byte, length)
-		if _, err := io.ReadFull(reader, message); err != nil {
-			fmt.Printf("failed to read message: %s\n", err)
-			return
-		}
+		rpc.From = conn.RemoteAddr().String()
 
-		lineReader := bytes.NewReader(message)
-
-		if err := t.Decoder.Decode(lineReader, &rpc); err != nil {
-			fmt.Printf("failed to decode message: %s\n", err)
+		if rpc.Stream {
+			peer.wg.Add(1)
+			fmt.Printf("[%s] incoming stream, waiting...\n", conn.RemoteAddr())
+			peer.wg.Wait()
+			fmt.Printf("[%s] stream closed, resuming read loop\n", conn.RemoteAddr())
 			continue
 		}
-		rpc.From = conn.RemoteAddr().String()
-		peer.Wg.Add(1)
-		fmt.Println("Waiting for the peer to read the message")
-		t.rpcch <- rpc
 
-		peer.Wg.Wait()
-		fmt.Println("Stream Done continue normal reading")
+		t.rpcch <- rpc
 	}
 }
