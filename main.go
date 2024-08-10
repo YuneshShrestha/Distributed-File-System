@@ -22,6 +22,7 @@ func makeServer(listenAddr string, root string, nodes ...string) *FileServer {
 		StorageRoot:       root + "_network",
 		PathTransformFunc: CASPathTransformFunc,
 		BootstrapNodes:    nodes,
+		EncryptionKey:     newEncryptionKey(),
 	}
 	s := NewFileServer(fileServerOpts)
 	tcpTransport.OnPeer = func(p *p2p.TCPPeer) error {

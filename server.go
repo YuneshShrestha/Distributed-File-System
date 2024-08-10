@@ -19,6 +19,7 @@ type FileServerOpts struct {
 	PathTransformFunc PathTransformFunc
 	Transport         p2p.Transport
 	BootstrapNodes    []string
+	EncryptionKey     []byte
 
 	// TCPTransportOpts  p2p.TCPTransportOpts
 }
@@ -209,7 +210,7 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	msg := Message{
 		Payload: MessageStoreFile{
 			Key:  key,
-			Size: size,
+			Size: size + 16, // 16 bytes for the IV
 		},
 	}
 	if err := s.boardCast(&msg); err != nil {
@@ -219,7 +220,8 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 
 	// TODO: use multiwriter to write to all peers
 	for _, peer := range s.peers {
-		n, err := io.Copy(peer, filebuf)
+		// send the file size to the peer in encoded form
+		n, err := copyEncrypt(peer, filebuf, s.EncryptionKey)
 		if err != nil {
 			return err
 		}

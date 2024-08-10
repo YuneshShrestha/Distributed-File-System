@@ -7,7 +7,8 @@ import (
 )
 
 func TestEncrptyAndDecrypt(t *testing.T) {
-	src := bytes.NewReader([]byte("Hello, World!"))
+	payload := "Hello, World!"
+	src := bytes.NewReader([]byte(payload))
 	dst := new(bytes.Buffer)
 
 	key := newEncryptionKey()
@@ -17,9 +18,18 @@ func TestEncrptyAndDecrypt(t *testing.T) {
 	}
 	fmt.Println(dst.String())
 	out := new(bytes.Buffer)
-	_, err = copyDecrypt(out, dst, key)
+	n, err := copyDecrypt(out, dst, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println(out.String())
+	// 16 bytes for the IV
+	if n != int64(len(payload)) +16 {
+		t.Fatalf("Expected %d, got %d", len(payload), n)
+	}
+
+	if out.String() != payload {
+		t.Fatalf("Expected %s, got %s", payload, out.String())
+	}
+	fmt.Println(out.String() == payload)	
+
 }

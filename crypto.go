@@ -29,23 +29,29 @@ func copyDecrypt(dst io.Writer, src io.Reader, key []byte) (int64, error) {
 	var (
 		buf    = make([]byte, 32*1024)
 		stream = cipher.NewCTR(block, iv)
+		rw     = block.BlockSize()
 	)
 	for {
+
 		n, err := src.Read(buf)
 		if n > 0 {
 			stream.XORKeyStream(buf, buf[:n])
-			if _, err := dst.Write(buf[:n]); err != nil {
+			nn, err := dst.Write(buf[:n])
+			if err != nil {
 				return 0, err
 			}
+			rw += nn
+
 		}
 		if err == io.EOF {
-			return 0, nil
+			break
 		}
 		if err != nil {
 			return 0, err
 		}
 
 	}
+	return int64(rw), nil
 }
 
 func copyEncrypt(dst io.Writer, src io.Reader, key []byte) (int64, error) {
@@ -72,22 +78,27 @@ func copyEncrypt(dst io.Writer, src io.Reader, key []byte) (int64, error) {
 	var (
 		buf    = make([]byte, 32*1024)
 		stream = cipher.NewCTR(block, iv)
+		rw    = block.BlockSize() 
 	)
 	for {
-		n, err := src.Read(buf)
+		n, err := src.Read(buf) // n = 5 for Hello
+
 		if n > 0 {
-			stream.XORKeyStream(buf, buf[:n]) // This line of Go code is encrypting the data read from the source using the CTR mode of operation.
-			if _, err := dst.Write(buf[:n]); err != nil {
+			stream.XORKeyStream(buf, buf[:n]) // This line of Go code is encrypting the data read from the source using the CTR mode of operation. CTR mode is a stream cipher mode of operation that allows encryption of individual bytes of data.
+			nn, err := dst.Write(buf[:n])
+			if err != nil {
 				return 0, err
 			}
+			rw += nn
 		}
 		if err == io.EOF {
-			return 0, nil
+			break
 		}
 		if err != nil {
 			return 0, err
 		}
 
 	}
+	return int64(rw), nil
 
 }
