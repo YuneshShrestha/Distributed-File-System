@@ -178,7 +178,8 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 			fmt.Println("Error writing to store: ", err)
 			return nil, err
 		}
-		fmt.Println("Received data from peer: ", n)
+		fmt.Printf("Received %d data from peer", n)
+
 		peer.CloseStream()
 	}
 
@@ -246,6 +247,10 @@ func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error
 		fmt.Println("Error reading file: ", err)
 		return err
 	}
+	// Print the file data
+	buf := new(bytes.Buffer)
+	io.Copy(buf, r)
+	fmt.Println("File data: ", buf.String())
 
 	// Find the peer to send the file to
 	peer, ok := s.peers[from]
