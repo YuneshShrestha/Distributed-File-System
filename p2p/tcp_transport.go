@@ -161,6 +161,7 @@ func (t *TCPTransport) handleConnection(conn net.Conn, outbound bool) {
 		var length int32
 		if err := binary.Read(reader, binary.BigEndian, &length); err != nil {
 			if err == io.EOF {
+				
 				fmt.Printf("peer closed the connection: %s\n", conn.RemoteAddr())
 				return
 			}

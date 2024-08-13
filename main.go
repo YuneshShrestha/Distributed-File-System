@@ -43,14 +43,26 @@ func main() {
 	time.Sleep(2 * time.Second)
 	go server2.Start()
 	time.Sleep(2 * time.Second)
+	key := "mypics"
 
 	// for i := 0; i < 10; i++ {
 	data := bytes.NewReader([]byte("Hello"))
 
-	server2.Store("mypics", data)
+	server2.Store(key, data)
 
 	// }
-	r, err := server2.Get("mypics")
+	// This part of the code is performing the following actions:
+	time.Sleep(3 * time.Second)
+	if server2.store.Delete(key) != nil {
+		log.Fatal("Failed to delete key")
+
+	}
+
+	// // Delete key from server2
+	if err := server2.store.Delete(key); err != nil {
+		log.Fatal(err)
+	}
+	r, err := server2.Get(key)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -94,17 +94,17 @@ func (s *Store) Delete(key string) error {
 		log.Printf("Deleted %s", pathKey.Filename)
 	}()
 	firstPathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.FirstPathName())
+	fmt.Printf("Deleting %s\n", firstPathNameWithRoot)
 	return os.RemoveAll(firstPathNameWithRoot)
 }
-func (s *Store) writeStream(key string, r io.Reader) (int, error) {
+
+func (s *Store) Write(key string, r io.Reader) (int64, error) {
+	return s.writeStream(key, r)
+}
+func (s *Store) WriteDecrypt(encKey []byte, key string, r io.Reader) (int, error) {
 	// PathTransformFunc is a function that takes a key and returns a PathKey
-	pathKey := s.PathTransformFunc(key)
-	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.Pathname)
-	if err := os.MkdirAll(pathNameWithRoot, os.ModePerm); err != nil {
-		return 0, err
-	}
-	fullPathWithRoot := fmt.Sprintf("%s/%s", pathNameWithRoot, pathKey.Filename)
-	f, err := os.Create(fullPathWithRoot)
+	f, err := s.openFileForWriting(key)
+
 	defer func() {
 
 		f.Close()
@@ -112,17 +112,33 @@ func (s *Store) writeStream(key string, r io.Reader) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	n, err := io.Copy(f, r)
+	n, err := copyDecrypt(f, r, encKey)
+
+	return int(n), err
+}
+func (s *Store) openFileForWriting(key string) (*os.File, error) {
+	pathKey := s.PathTransformFunc(key)
+	pathNameWithRoot := fmt.Sprintf("%s/%s", s.Root, pathKey.Pathname)
+	if err := os.MkdirAll(pathNameWithRoot, os.ModePerm); err != nil {
+		return nil, err
+	}
+	fullPathWithRoot := fmt.Sprintf("%s/%s", pathNameWithRoot, pathKey.Filename)
+	return os.Create(fullPathWithRoot)
+}
+func (s *Store) writeStream(key string, r io.Reader) (int64, error) {
+	// PathTransformFunc is a function that takes a key and returns a PathKey
+	f, err := s.openFileForWriting(key)
+	defer func() {
+
+		f.Close()
+	}()
 	if err != nil {
 		return 0, err
 	}
-	return int(n), nil
+	return io.Copy(f, r)
 }
 
-func (s *Store) Write(key string, r io.Reader) (int, error) {
-	return s.writeStream(key, r)
-}
-func (s *Store) Read(key string) (int64,io.Reader, error) {
+func (s *Store) Read(key string) (int64, io.Reader, error) {
 	return s.readStream(key)
 
 }

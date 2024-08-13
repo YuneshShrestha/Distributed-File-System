@@ -146,6 +146,7 @@ func (s *FileServer) boardCast(msg *Message) error {
 		return err
 	}
 	for _, peer := range s.peers {
+		fmt.Println("Sending message to peer: ", peer.RemoteAddr())
 		if err := peer.Send(msgBuf.Bytes()); err != nil {
 			return err
 		}
@@ -171,17 +172,20 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 		fmt.Println("Error broadcasting message: ", err)
 		return nil, err
 	}
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 	for _, peer := range s.peers {
+		fmt.Println("Requesting file from peer: ", peer.RemoteAddr())
 		//read the file size from the peer
+		// length of the peer
 		var fileSize int64
-		err := binary.Read(peer, binary.LittleEndian, &fileSize)
+		err := binary.Read(peer, binary.LittleEndian, &fileSize) // Little endian is a type of computer architecture where the least significant byte (LSB) is stored at the smallest address and the most significant byte (MSB) at the highest address
+
 		if err != nil {
 			fmt.Println("Error reading file size: ", err)
 			return nil, err
 		}
 		fmt.Println("Receiving file from peer: ", peer.RemoteAddr())
-		n, err := s.store.Write(key, io.LimitReader(peer, fileSize))
+		n, err := s.store.WriteDecrypt(s.EncryptionKey, key, io.LimitReader(peer, fileSize))
 		print("Received data from peer: ", n)
 		// time.Sleep(4 * time.Second)
 		fmt.Println("Receiving file from peer: ", peer.RemoteAddr())
@@ -190,7 +194,7 @@ func (s *FileServer) Get(key string) (io.Reader, error) {
 			return nil, err
 		}
 		fmt.Println("Received data from peer: ", n)
-		peer.CloseStream()
+		// peer.CloseStream()
 	}
 
 	select {}
@@ -210,7 +214,7 @@ func (s *FileServer) Store(key string, r io.Reader) error {
 	msg := Message{
 		Payload: MessageStoreFile{
 			Key:  key,
-			Size: size + 16, // 16 bytes for the IV
+			Size: int(size) + 16, // 16 bytes for the IV
 		},
 	}
 	if err := s.boardCast(&msg); err != nil {
@@ -238,13 +242,15 @@ func (s *FileServer) handleMessage(from string, msg *Message) error {
 	case MessageStoreFile:
 		return s.handleMessageStoreFile(from, v)
 	case MessageGetFile:
+		fmt.Println("Received message to get file: ", v.Key)
 		return s.handleMessageGetFile(from, v)
+	default:
+		return fmt.Errorf("unknown message type: %T", v)
 	}
 	return nil
 
 }
 func (s *FileServer) handleMessageGetFile(from string, msg MessageGetFile) error {
-
 	if !s.store.Has(msg.Key) {
 
 		return fmt.Errorf("need to serve file: %s but it does not exist even in disk", msg.Key)
